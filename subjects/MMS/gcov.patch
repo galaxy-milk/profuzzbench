@@ -1,0 +1,12 @@
+diff --git a/examples/server_example_substitution/server_example_substitution.c b/examples/server_example_substitution/server_example_substitution.c
+index 2f41d892..94be6a30 100644
+--- a/examples/server_example_substitution/server_example_substitution.c
++++ b/examples/server_example_substitution/server_example_substitution.c
+@@ -234,6 +234,7 @@ main(int argc, char** argv)
+     running = 1;
+ 
+     signal(SIGINT, sigint_handler);
++    signal(SIGTERM, sigint_handler);
+ 
+     float t = 0.f;
+ 

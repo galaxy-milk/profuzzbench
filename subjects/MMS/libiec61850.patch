@@ -1,0 +1,16 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 20a94f8c..00388947 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -7,6 +7,11 @@ if(DEFINED ENV{TOOLCHAIN})
+     set(CMAKE_AR	"$ENV{TOOLCHAIN}ar" CACHE FILEPATH "CW archiver" FORCE)
+ endif()
+ 
++set(CMAKE_C_COMPILER afl-clang-fast)
++set(CMAKE_CXX_COMPILER afl-clang-fast++)
++set(CMAKE_CXX_LINK_EXECUTABLE "afl-clang-fast++ -o")
++
++
+ project(libiec61850)
+ ENABLE_TESTING()
+ 
