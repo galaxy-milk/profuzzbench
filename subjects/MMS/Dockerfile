@@ -38,11 +38,13 @@ ARG MAKE_OPT
 ARG DFDIR=clones/profuzzbench/subjects/MMS
 
 # Set up fuzzers
-COPY --chown=ubuntu:ubuntu clones/aflnet aflnet
-RUN cd aflnet && \
-    make clean all $MAKE_OPT && \
-    cd llvm_mode && make $MAKE_OPT
-
+COPY --chown=ubuntu:ubuntu $DFDIR/aflnet.patch /home/ubuntu/aflnet.patch
+RUN cd /home/ubuntu && \
+    git clone https://github.com/aflnet/aflnet.git --depth=1 && \
+    cd aflnet && \
+    patch -p1 < ../aflnet.patch && \
+    make clean all -j && \
+    cd llvm_mode && make -j
 
 # Set up environment variables for AFLNet
 ENV WORKDIR="/home/ubuntu/experiments"
