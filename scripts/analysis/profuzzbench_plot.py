@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import argparse
 from pandas import read_csv
@@ -24,6 +24,8 @@ def main(csv_file, put, runs, cut_off, step, out_file):
                          (df['fuzzer'] == fuzzer) & 
                          (df['cov_type'] == cov_type)]
 
+        if df1.empty:
+          continue
         mean_list.append((subject, fuzzer, cov_type, 0, 0.0))
         for time in range(1, cut_off + 1, step):
           cov_total = 0
