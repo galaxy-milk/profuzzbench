@@ -1,0 +1,12 @@
+diff --git a/examples/tls_server_example/tls_server_example.c b/examples/tls_server_example/tls_server_example.c
+index a8980d01..b49fd69f 100644
+--- a/examples/tls_server_example/tls_server_example.c
++++ b/examples/tls_server_example/tls_server_example.c
+@@ -175,6 +175,7 @@ main(int argc, char** argv)
+     running = 1;
+ 
+     signal(SIGINT, sigint_handler);
++    signal(SIGTERM, sigint_handler);
+ 
+     float t = 0.f;
+ 

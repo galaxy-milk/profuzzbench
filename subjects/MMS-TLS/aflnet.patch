@@ -1,0 +1,731 @@
+diff --git a/Makefile b/Makefile
+index d068a20..78452b4 100644
+--- a/Makefile
++++ b/Makefile
+@@ -69,14 +69,14 @@ afl-as: afl-as.c afl-as.h $(COMM_HDR) | test_x86
+ 	$(CC) $(CFLAGS) $@.c -o $@ $(LDFLAGS)
+ 	ln -sf afl-as as
+ 
+-afl-fuzz: afl-fuzz.c $(COMM_HDR) aflnet.o aflnet.h | test_x86
+-	$(CC) $(CFLAGS) $@.c aflnet.o -o $@ $(LDFLAGS)
++afl-fuzz: afl-fuzz.c $(COMM_HDR) aflnet.o mms_parse.o aflnet.h | test_x86
++	$(CC) $(CFLAGS) $@.c aflnet.o mms_parse.o -o $@ $(LDFLAGS)
+ 
+-afl-replay: afl-replay.c $(COMM_HDR) aflnet.o aflnet.h | test_x86
+-	$(CC) $(CFLAGS) $@.c aflnet.o -o $@ $(LDFLAGS)
++afl-replay: afl-replay.c $(COMM_HDR) aflnet.o mms_parse.o aflnet.h | test_x86
++	$(CC) $(CFLAGS) $@.c aflnet.o mms_parse.o -o $@ $(LDFLAGS)
+ 
+-aflnet-replay: aflnet-replay.c $(COMM_HDR) aflnet.o aflnet.h | test_x86
+-	$(CC) $(CFLAGS) $@.c aflnet.o -o $@ $(LDFLAGS)
++aflnet-replay: aflnet-replay.c $(COMM_HDR) aflnet.o mms_parse.o aflnet.h | test_x86
++	$(CC) $(CFLAGS) $@.c aflnet.o mms_parse.o -o $@ $(LDFLAGS)
+ 
+ afl-showmap: afl-showmap.c $(COMM_HDR) | test_x86
+ 	$(CC) $(CFLAGS) $@.c -o $@ $(LDFLAGS)
+diff --git a/afl-fuzz.c b/afl-fuzz.c
+index f08b941..bcb2048 100644
+--- a/afl-fuzz.c
++++ b/afl-fuzz.c
+@@ -9088,6 +9088,12 @@ int main(int argc, char** argv) {
+         }else if (!strcmp(optarg, "SNMP")) {
+           extract_requests = &extract_requests_SNMP;
+           extract_response_codes = &extract_response_codes_SNMP;
++        }else if (!strcmp(optarg, "MMS")) {
++          extract_requests = &extract_requests_mms;
++          extract_response_codes = &extract_response_codes_mms;
++        }else if (!strcmp(optarg, "MMS-TLS")) {
++          extract_requests = &extract_requests_mms_tls;
++          extract_response_codes = &extract_response_codes_mms_tls;
+         } else {
+           FATAL("%s protocol is not supported yet!", optarg);
+         }
+diff --git a/afl-replay.c b/afl-replay.c
+index 9179234..593a9fd 100644
+--- a/afl-replay.c
++++ b/afl-replay.c
+@@ -65,6 +65,8 @@ int main(int argc, char* argv[])
+   else if (!strcmp(argv[2], "SIP")) extract_response_codes = &extract_response_codes_sip;
+   else if (!strcmp(argv[2], "HTTP")) extract_response_codes = &extract_response_codes_http;
+   else if (!strcmp(argv[2], "IPP")) extract_response_codes = &extract_response_codes_ipp;
++  else if (!strcmp(argv[2], "MMS")) extract_response_codes = &extract_response_codes_mms;
++  else if (!strcmp(argv[2], "MMS-TLS")) extract_response_codes = &extract_response_codes_mms_tls;
+   else {fprintf(stderr, "[AFL-replay] Protocol %s has not been supported yet!\n", argv[2]); exit(1);}
+ 
+   portno = atoi(argv[3]);
+diff --git a/aflnet-replay.c b/aflnet-replay.c
+index 428fb90..52400ae 100644
+--- a/aflnet-replay.c
++++ b/aflnet-replay.c
+@@ -57,7 +57,9 @@ int main(int argc, char* argv[])
+   else if (!strcmp(argv[2], "NTP")) extract_response_codes = &extract_response_codes_NTP;
+   else if (!strcmp(argv[2], "DHCP")) extract_response_codes = &extract_response_codes_dhcp;
+   else if (!strcmp(argv[2], "SNTP")) extract_response_codes = &extract_response_codes_SNTP;  
+-else {fprintf(stderr, "[AFLNet-replay] Protocol %s has not been supported yet!\n", argv[2]); exit(1);}
++  else if (!strcmp(argv[2], "MMS")) extract_response_codes = &extract_response_codes_mms;  
++  else if (!strcmp(argv[2], "MMS-TLS")) extract_response_codes = &extract_response_codes_mms_tls;  
++  else {fprintf(stderr, "[AFLNet-replay] Protocol %s has not been supported yet!\n", argv[2]); exit(1);}
+ 
+   portno = atoi(argv[3]);
+ 
+diff --git a/aflnet.h b/aflnet.h
+index dda35d5..1aba49f 100644
+--- a/aflnet.h
++++ b/aflnet.h
+@@ -75,6 +75,8 @@ unsigned int* extract_response_codes_tftp(unsigned char* buf, unsigned int buf_s
+ unsigned int* extract_response_codes_SNTP(unsigned char* buf, unsigned int buf_size, unsigned int* state_count_ref);
+ unsigned int* extract_response_codes_NTP(unsigned char* buf, unsigned int buf_size, unsigned int* state_count_ref);
+ unsigned int* extract_response_codes_SNMP(unsigned char* buf, unsigned int buf_size, unsigned int* state_count_ref);
++unsigned int* extract_response_codes_mms(unsigned char* buf, unsigned int buf_size, unsigned int* state_count_ref);
++unsigned int* extract_response_codes_mms_tls(unsigned char* buf, unsigned int buf_size, unsigned int* state_count_ref);
+ extern unsigned int* (*extract_response_codes)(unsigned char* buf, unsigned int buf_size, unsigned int* state_count_ref);
+ 
+ region_t* extract_requests_smtp(unsigned char* buf, unsigned int buf_size, unsigned int* region_count_ref);
+@@ -94,6 +96,8 @@ region_t* extract_requests_dhcp(unsigned char* buf, unsigned int buf_size, unsig
+ region_t* extract_requests_SNTP(unsigned char* buf, unsigned int buf_size, unsigned int* region_count_ref);
+ region_t* extract_requests_NTP(unsigned char* buf, unsigned int buf_size, unsigned int* region_count_ref);
+ region_t* extract_requests_SNMP(unsigned char* buf, unsigned int buf_size, unsigned int* region_count_ref);
++region_t* extract_requests_mms(unsigned char* buf, unsigned int buf_size, unsigned int* region_count_ref);
++region_t* extract_requests_mms_tls(unsigned char* buf, unsigned int buf_size, unsigned int* region_count_ref);
+ extern region_t* (*extract_requests)(unsigned char* buf, unsigned int buf_size, unsigned int* region_count_ref);
+ 
+ // Network communication functions
+diff --git a/mms_parse.c b/mms_parse.c
+new file mode 100644
+index 0000000..74f5c2e
+--- /dev/null
++++ b/mms_parse.c
+@@ -0,0 +1,633 @@
++// Date:   Wed Feb 19 11:13:53 AM 2025
++// Mail:   lunar_ubuntu@qq.com
++// Author: https://github.com/xiaoqixian
++
++#include "alloc-inl.h"
++#include "aflnet.h"
++
++typedef int i32;
++
++typedef struct {
++  u8* buf;
++  i32 size;
++  u32 max_size;
++} ByteBuffer;
++
++typedef struct {
++  u32 state;
++  u32 state_count;
++} State;
++
++// typedef enum: u8 {
++//   GetNameList = 0xa1,
++// } ConfirmedServiceResponse;
++
++typedef struct {
++  u8 cotp_indication;
++  u8 cotp_pdu_type;
++  u8 cotp_flow;
++  u8 session_spdu_type;
++  u8 session_indication;
++  u8 presentation_context_id;
++
++  u8 mms_pdu_type;
++  u8 mms_service_type;
++
++  ByteBuffer cotp_payload;
++  ByteBuffer user_data;
++  ByteBuffer mms_data;
++} IsoConnection;
++
++typedef struct {
++  u8 tls_content_type;
++
++  u8 cotp_indication;
++  u8 cotp_pdu_type;
++  u8 cotp_flow;
++  u8 session_spdu_type;
++  u8 session_indication;
++  u8 presentation_context_id;
++
++  u8 mms_pdu_type;
++  u8 mms_service_type;
++
++  ByteBuffer cotp_payload;
++  ByteBuffer user_data;
++  ByteBuffer mms_data;
++} IsoTLSConnection;
++
++typedef enum {
++  COTP_OK,
++  COTP_ERROR,
++  COTP_INVALID_SIZE,
++  COTP_CONNECT_CONFIRM,
++  COTP_DATA,
++  COTP_MORE_FRAGMENTS_FOLLOW,
++} CotpIndication;
++
++typedef enum {
++  SESSION_OK,
++  SESSION_ERROR,
++  SESSION_CONNECT,
++  SESSION_GIVE_TOKEN,
++  SESSION_DATA,
++  SESSION_ABORT,
++  SESSION_FINISH,
++  SESSION_DISCONNECT,
++  SESSION_NOT_FINISHED
++} SessionIndication;
++
++typedef enum {
++  PRESENTATION_OK,
++  PRESENTATION_ERROR,
++  PRESENTATION_SHORT_LENGTH,
++  PRESENTATION_INVALID_TAG,
++  PRESENTATION_INVALID_DATA_VALUE_TAG,
++  PRESENTATION_INVALID_TRANSFER_SYNTAX_NAME,
++  PRESENTATION_INVALID_LENGTH,
++  PRESENTATION_HAS_NO_ABSTRACT_SYNTAX_NAME,
++} PresentationIndication;
++
++typedef enum {
++  MMS_OK,
++  MMS_SHORT,
++  MMS_INVALID,
++  MMS_INVALID_INVOKE_ID,
++} MMSIndication;
++
++typedef enum {
++  ACSE_ERROR,
++} AcseIndication;
++
++static void print_near(const u8* const buf, const u32 size) {
++  for (int i = 0; i < size; i++) {
++    printf("%02x ", buf[i]);
++  }
++  printf("\n");
++}
++
++// --end
++static int BerDecoder_decodeLengthRecursive(u8*, int*, int, int, int, int);
++
++static int
++getIndefiniteLength(uint8_t* buffer, int bufPos, int maxBufPos, int depth, int maxDepth)
++{
++    depth++;
++
++    if (depth > maxDepth)
++        return -1;
++
++    int length = 0;
++
++    while (bufPos < maxBufPos) {
++        if ((buffer[bufPos] == 0) && ((bufPos + 1) < maxBufPos) && (buffer[bufPos+1] == 0)) {
++            return length + 2;
++        }
++        else {
++            length++;
++
++            if ((buffer[bufPos++] & 0x1f) == 0x1f) {
++                /* handle extended tags */
++                bufPos++;
++                length++;
++            }
++
++            int subLength = -1;
++
++            int newBufPos = BerDecoder_decodeLengthRecursive(buffer, &subLength, bufPos, maxBufPos, depth, maxDepth);
++
++            if (newBufPos == -1)
++                return -1;
++
++            length += subLength + newBufPos - bufPos;
++
++            bufPos = newBufPos + subLength;
++        }
++    }
++
++    return -1;
++}
++
++static int
++BerDecoder_decodeLengthRecursive(uint8_t* buffer, int* length, int bufPos, int maxBufPos, int depth, int maxDepth)
++{
++    if (bufPos >= maxBufPos)
++        return -1;
++
++    uint8_t len1 = buffer[bufPos++];
++
++    if (len1 & 0x80) {
++        int lenLength = len1 & 0x7f;
++
++        if (lenLength == 0) { /* indefinite length form */
++            *length = getIndefiniteLength(buffer, bufPos, maxBufPos, depth, maxDepth);
++        }
++        else {
++            *length = 0;
++
++            int i;
++            for (i = 0; i < lenLength; i++) {
++                if (bufPos >= maxBufPos)
++                    return -1;
++
++                if (bufPos + (*length) > maxBufPos)
++                    return -1;
++
++                *length <<= 8;
++                *length += buffer[bufPos++];
++            }
++        }
++
++    }
++    else {
++        *length = len1;
++    }
++
++    if (*length < 0)
++        return -1;
++
++    if (*length > maxBufPos)
++        return -1;
++
++    if (bufPos + (*length) > maxBufPos)
++        return -1;
++
++    return bufPos;
++}
++
++static int ber_decode_length(uint8_t* buffer, int* length, int bufPos, int maxBufPos)
++{
++    return BerDecoder_decodeLengthRecursive(buffer, length, bufPos, maxBufPos, 0, 50);
++}
++
++static uint32_t ber_decode_u32(uint8_t* buffer, int intLen, int bufPos)
++{
++    uint32_t value = 0;
++
++    int i;
++    for (i = 0; i < intLen; i++) {
++        value <<= 8;
++        value += buffer[bufPos + i];
++    }
++
++    return value;
++}
++
++static int add_buf_to_payload(IsoConnection* self, const u8* const buf, const u32 size) {
++  if (size < 1 || (self->cotp_payload.size + size < self->cotp_payload.max_size)) {
++    return 1;
++  }
++  u8* dest = self->cotp_payload.buf + self->cotp_payload.size;
++  memcpy(dest, buf, size);
++  self->cotp_payload.size += size;
++  return 0;
++}
++
++static void init_conn(IsoConnection* self) {
++  // Cotp payload need to be saved
++  ByteBuffer cotp_payload = self->cotp_payload;
++  memset(self, 0, sizeof(IsoConnection));
++  self->cotp_payload = cotp_payload;
++}
++
++static CotpIndication parse_cotp(IsoConnection* self, ByteBuffer* msg) {
++  if (msg->size < 3) {
++    return COTP_INVALID_SIZE;
++  }
++  const u8* buf = msg->buf;
++  const u8 len = buf[0];
++  self->cotp_pdu_type = buf[1];
++
++  switch (buf[1]) {
++    // conncect confirm
++    case 0xd0:
++      return COTP_CONNECT_CONFIRM;
++      break;
++
++      // data
++    case 0xf0:
++      if (!add_buf_to_payload(self, buf + 3, msg->size - 3)) {
++        return COTP_ERROR;
++      }
++      self->cotp_flow = buf[2];
++      if (buf[2] & 0x80) {
++        return COTP_DATA;
++      } else {
++        return COTP_MORE_FRAGMENTS_FOLLOW;
++      }
++
++    default:
++      return COTP_ERROR;
++  }
++}
++
++static SessionIndication parse_session_header_parameters(IsoConnection* self, const ByteBuffer* msg) {
++  u32 pos = 2;
++  u8* buf = msg->buf;
++
++  while (pos < msg->size) {
++    if (pos >= msg->size - 1) {
++      return SESSION_ERROR;
++    }
++    const u8 tag = buf[pos++], len = buf[pos++];
++    if (pos + len > msg->size) {
++      return SESSION_ERROR;
++    }
++
++    switch (tag) {
++      // case 1:
++      // case 5:
++      // case 17:
++      // case 20:
++      // case 25:
++      // case 49:
++      // case 51:
++      // case 52:
++      // case 60:
++      //   pos += len;
++      //   break;
++
++      case 193:
++        self->user_data.buf = buf + pos;
++        self->user_data.size = msg->size - pos;
++        return SESSION_OK;
++
++      default:
++        pos += len;
++    }
++  }
++  return SESSION_ERROR;
++}
++
++
++static SessionIndication parse_session(IsoConnection* self, const ByteBuffer* msg) {
++  u8* buf = msg->buf;
++  const u8 id = buf[0], len = buf[1];
++  // the session length field does not contain SPDU type and itself.
++  self->session_spdu_type = id;
++
++  switch (id) {
++    case 14: /* ACCEPT SPDU */
++      // if (len != (msg->size - 2)) return SESSION_ERROR;
++      if (len != (msg->size - 2)) {
++        // printf("msg->size = %d, len = %d\n", msg->size, len);
++        return SESSION_ERROR;
++      }
++      if (parse_session_header_parameters(self, msg) == SESSION_OK)
++        return SESSION_CONNECT;
++      else return SESSION_ERROR;
++
++    case 1: /* Give token / data SPDU */
++      if (msg->size < 4) 
++        return SESSION_ERROR;
++      if (len == 0 && (buf[2] == 1) && (buf[3] == 0)) {
++        self->user_data.buf = buf + 4;
++        self->user_data.size = msg->size - 4;
++        return SESSION_DATA;
++      }
++      else return SESSION_ERROR;
++
++    default:
++      return SESSION_ERROR;
++  }
++}
++
++static PresentationIndication parse_presentation_user_data(IsoConnection* self, ByteBuffer* msg) {
++  u8* buf = msg->buf;
++  const int max_buf_pos = msg->size;
++  int pos = 0;
++
++  if (max_buf_pos < 9) {
++    return PRESENTATION_SHORT_LENGTH;
++  }
++
++  if (buf[pos++] != 0x61) {
++    return PRESENTATION_INVALID_TAG;
++  }
++
++  int len;
++  pos = ber_decode_length(buf, &len, pos, max_buf_pos);
++  if (pos < 0 || len <= 0) return PRESENTATION_INVALID_LENGTH;
++
++  if (buf[pos++] != 0x30) {
++    return PRESENTATION_INVALID_DATA_VALUE_TAG;
++  }
++
++  pos = ber_decode_length(buf, &len, pos, max_buf_pos);
++  if (pos < 0 || len <= 0) return PRESENTATION_INVALID_LENGTH;
++  u8 has_abstract_syntax_name = 0;
++
++  while (pos < max_buf_pos) {
++    const u8 tag = buf[pos++];
++    pos = ber_decode_length(buf, &len, pos, max_buf_pos);
++    if (pos < 0 || len <= 0) return PRESENTATION_INVALID_LENGTH;
++
++    switch (tag) {
++      case 0x02: /* abstract-syntax-name */
++        has_abstract_syntax_name = 1;
++        self->presentation_context_id = buf[pos];
++        pos += len;
++        break;
++
++      case 0x06: /* transfer-syntax-name */
++        if (buf[pos] != 0x51 || buf[pos + 1] != 0x01) {
++          return PRESENTATION_INVALID_TRANSFER_SYNTAX_NAME;
++        }
++        pos += len;
++        break;
++
++      case 0xa0: /* presentation-data */
++        if (has_abstract_syntax_name == 0) {
++          return PRESENTATION_HAS_NO_ABSTRACT_SYNTAX_NAME;
++        }
++        self->mms_data.buf = &buf[pos];
++        self->mms_data.size = len;
++        return PRESENTATION_OK;
++
++      default:
++        pos += len;
++    }
++  }
++  return PRESENTATION_ERROR;
++}
++
++static MMSIndication parse_mms_confirmed_response(IsoConnection* self, u8* const buf, u32 size) {
++  if (size <= 2) return MMS_SHORT;
++  u32 pos = 0, invoke_id = 0;
++  while (pos < size) {
++    u8 tag = buf[pos++], extended_tag = 0;
++    int len;
++    if ((tag & 0x1f) == 0x1f) {
++      extended_tag = 1;
++      tag = buf[pos++];
++    }
++
++    pos = ber_decode_length(buf, &len, pos, size);
++    if (len <= 0 || pos < 0) return MMS_INVALID;
++    if (size - pos < len) return MMS_SHORT;
++
++    switch (tag) {
++      case 0x02:
++        invoke_id = ber_decode_u32(buf, len, pos);
++        break;
++      default:
++        self->mms_service_type = tag;
++    }
++  }
++  return MMS_OK;
++}
++
++// MmsServerConnection_parseMessage
++static MMSIndication parse_mms(IsoConnection* self, ByteBuffer* msg) {
++  if (msg->size < 2) return MMS_SHORT;
++  u8* buf = msg->buf;
++  const u32 max_pos = msg->size;
++  u32 pos = 0;
++  
++  // assert(buf[pos] == 0xa1 || buf[pos] == 0xa9);
++  const u8 pdu_type = buf[pos++];
++  self->mms_pdu_type = pdu_type;
++  int len;
++  pos = ber_decode_length(buf, &len, pos, max_pos);
++  if (len <= 0 || pos < 0) {
++    return MMS_INVALID;
++  }
++
++  switch (pdu_type) {
++    case 0xa1:
++      // {
++      //   MMSIndication mms_indication = parse_mms_confirmed_response(self, buf + pos, msg->size - pos);
++      //   if (mms_indication != MMS_OK) return mms_indication;
++      // }
++      return parse_mms_confirmed_response(self, buf + pos, msg->size - pos);
++
++    default:
++      break;
++  }
++
++  return MMS_OK;
++}
++
++static u32 merge_state(IsoConnection* self) {
++  const u32 cotp_indication = (self->cotp_pdu_type << 4) | self->cotp_indication;
++  // const u32 session_spdu_type = self->session_spdu_type;
++  const u32 session_indication = self->session_indication;
++  const u32 mms_pdu_type = self->mms_pdu_type;
++  const u32 mms_service_type = self->mms_service_type;
++
++  return cotp_indication << 24 | session_indication << 16 | mms_pdu_type << 8 | mms_service_type;
++}
++
++/*
++ * We assume all MMS packets start with 0x030000
++ */
++region_t* extract_requests_mms(unsigned char* buf, unsigned int buf_size, unsigned int* region_count_ref)
++{
++  char* mem;
++  unsigned int byte_count = 0, mem_count = 0, mem_size = 1024, region_count = 0;
++  region_t *regions = NULL;
++  const static char starter[3] = {0x03, 0x00, 0x00};
++  
++  mem = (char*)ck_alloc(mem_size);
++
++  unsigned int cur_start = 0, cur_end = 0;
++
++  while (byte_count < buf_size) {
++    memcpy(&mem[mem_count], buf + byte_count++, 1);
++
++    // check if the last three bytes are 0x030000
++    if ((mem_count > 2) && (memcmp(&mem[mem_count - 2], starter, 3) == 0)) {
++      region_count++;
++      regions = (region_t*)ck_realloc(regions, region_count * sizeof(region_t));
++      regions[region_count - 1].start_byte = cur_start;
++      regions[region_count - 1].end_byte = cur_end - 3;
++      regions[region_count - 1].state_sequence = NULL;
++      regions[region_count - 1].state_count = 0;
++
++      mem_count = 0;
++      cur_start = cur_end - 2;
++      cur_end++;
++    } else {
++      mem_count++;
++      cur_end++;
++
++      // check if the last byte has been reached
++      if (cur_end == buf_size - 1) {
++        region_count++;
++        regions = (region_t *)ck_realloc(regions, region_count * sizeof(region_t));
++        regions[region_count - 1].start_byte = cur_start;
++        regions[region_count - 1].end_byte = cur_end;
++        regions[region_count - 1].state_sequence = NULL;
++        regions[region_count - 1].state_count = 0;
++        break;
++      }
++
++      if (mem_count == mem_size) {
++        // enlarge the mem buffer
++        mem_size = mem_size * 2;
++        mem=(char *)ck_realloc(mem, mem_size);
++      }
++    }
++  }
++
++  if (mem) ck_free(mem);
++
++  //in case region_count equals zero, it means that the structure of the buffer is broken
++  //hence we create one region for the whole buffer
++  if ((region_count == 0) && (buf_size > 0)) {
++    regions = (region_t *)ck_realloc(regions, sizeof(region_t));
++    regions[0].start_byte = 0;
++    regions[0].end_byte = buf_size - 1;
++    regions[0].state_sequence = NULL;
++    regions[0].state_count = 0;
++
++    region_count = 1;
++  }
++
++  *region_count_ref = region_count;
++  return regions;
++}
++
++
++u32* extract_response_codes_mms(u8* buf, const u32 buf_size, u32* state_count_ref)
++{
++  u8* const og_buf = buf;
++  u32 state_count = 0, *state_sequence = NULL;
++  u32 byte_count = 0;
++
++  // initial state
++  state_count++;
++  state_sequence = (u32*)ck_realloc(state_sequence, state_count * sizeof(u32));
++  if (state_sequence == NULL) PFATAL("Unable realloc a memory region to store state sequence");
++  state_sequence[state_count - 1] = 0;
++
++  IsoConnection self;
++  self.cotp_payload.buf = (u8*)malloc(4096);
++  self.cotp_payload.size = 0;
++  self.cotp_payload.max_size = 4096;
++
++  while (byte_count < buf_size) {
++    buf = og_buf + byte_count;
++    init_conn(&self);
++
++    const u32 remained_buf_size = buf_size - byte_count;
++    if (remained_buf_size < 4) {
++      goto collect_state;
++    }
++    // TPKT
++    // assert(buf[pos] == 0x03 && buf[pos + 1] == 0x00);
++    const u8 tpkt_ver = buf[0];
++    const u16 tpkt_packet_len = ((u16)buf[2] << 8) + buf[3];
++    byte_count += tpkt_packet_len;
++
++    if (remained_buf_size < tpkt_packet_len) {
++      break;
++    }
++
++    if (tpkt_ver != 0x03) {
++      goto collect_state;
++    }
++
++    ByteBuffer cotp_buf;
++    cotp_buf.buf = buf + 4;
++    cotp_buf.size = tpkt_packet_len - 4;
++    CotpIndication cotp_indication = parse_cotp(&self, &cotp_buf);
++    SessionIndication session_indication;
++    PresentationIndication presentation_indication;
++
++    self.cotp_indication = cotp_indication;
++
++    switch (cotp_indication) {
++      case COTP_MORE_FRAGMENTS_FOLLOW:
++      case COTP_CONNECT_CONFIRM:
++        goto collect_state;
++        break;
++
++      case COTP_DATA:
++        session_indication = parse_session(&self, &(self.cotp_payload));
++        self.cotp_payload.size = 0;
++        break;
++
++      default:
++        printf("unrecognized cotp_indication 0x%02x\n", cotp_indication);
++        self.cotp_payload.size = 0;
++        goto collect_state;
++    }
++
++    self.session_indication = session_indication;
++
++    switch (session_indication) {
++      case SESSION_DATA:
++        presentation_indication = parse_presentation_user_data(&self, &self.user_data);
++        if (presentation_indication != PRESENTATION_OK) {
++          goto collect_state;
++        }
++        parse_mms(&self, &(self.mms_data));
++        break;
++
++      default:
++        // I use session_spdu_type field to differ SESSION_CONNECT 
++        // and SESSION_DATA packets, so the following content can 
++        // be just discarded.
++        goto collect_state;
++    }
++
++collect_state:
++    state_count++;
++    state_sequence = (unsigned int *)ck_realloc(state_sequence, state_count * sizeof(unsigned int));
++    if (state_sequence == NULL) PFATAL("Unable realloc a memory region to store state sequence");
++    state_sequence[state_count - 1] = merge_state(&self);
++  }
++
++  free(self.cotp_payload.buf);
++  *state_count_ref = state_count;
++  return state_sequence;
++}
++
++u32* extract_response_codes_mms_tls(u8* const buf, u32 const buf_size, u32* const state_count_ref) {
++  return extract_response_codes_tls(buf, buf_size, state_count_ref);
++}
++
++region_t* extract_requests_mms_tls(unsigned char* buf, unsigned int buf_size, unsigned int* region_count_ref) {
++  return extract_requests_tftp(buf, buf_size, region_count_ref);
++}
